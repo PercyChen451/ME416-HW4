@@ -59,14 +59,12 @@ class LineController(Node):
     def _setup_communications(self):
         """Configure all ROS publishers and subscribers."""
         # Control command publisher
-        self.twist_pub = self.create_publisher(
-            Twist, 
+        self.twist_pub = self.create_publisher(Twist, 
             '/robot_twist', 
             10
         )
         # Error signal publisher
-        self.error_pub = self.create_publisher(
-            Float64, 
+        self.error_pub = self.create_publisher(Float64, 
             '/control_error', 
             10
         )
@@ -81,7 +79,6 @@ class LineController(Node):
     def centroid_callback(self, msg):
         """
         Process centroid position and compute control commands.
-        
         Args:
             msg (PointStamped): Contains the detected line centroid position
         """
@@ -89,10 +86,8 @@ class LineController(Node):
             # Calculate current error
             current_error = msg.point.x - self.target_x
             self.last_error = current_error
-            
             # Publish error for monitoring
             self._publish_error(current_error)
-            
             # Generate and publish control command
             control_msg = self._generate_control_command(current_error)
             self.twist_pub.publish(control_msg)
@@ -122,13 +117,10 @@ class LineController(Node):
             Twist: Control command message
         """
         cmd = Twist()
-        
         # Set constant forward velocity
         cmd.linear.x = self.base_linear_speed
-        
         # Calculate angular velocity (proportional control)
         angular_z = -self.gain_proportional * error
-        
         # Apply angular speed limits
         cmd.angular.z = max(
             min(angular_z, self.max_angular_speed),
@@ -139,13 +131,11 @@ class LineController(Node):
 def main(args=None):
     """Initialize and spin the node."""
     rclpy.init(args=args)
-    try:
-        controller = LineController()
-        rclpy.spin(controller)
-    finally:
-        if 'controller' in locals():
-            controller.destroy_node()
-        rclpy.shutdown()
+    controller = LineController()
+    rclpy.spin(controller)
+    if 'controller' in locals():
+        controller.destroy_node()
+    rclpy.shutdown()
 
 if __name__ == '__main__':
     main()

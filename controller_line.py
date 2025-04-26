@@ -13,15 +13,11 @@ import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Twist, PointStamped
 from std_msgs.msg import Float64
-
 class LineController(Node):
     """Enhanced proportional controller for robust line following."""
-    
     def __init__(self):
         """Initialize node with parameters, publishers, and subscriber."""
         super().__init__('line_controller')
-        
-        # Declare and get parameters
         self.declare_parameters(
             namespace='',
             parameters=[
@@ -31,23 +27,18 @@ class LineController(Node):
                 ('max_angular_speed', 1.0)
             ]
         )
-        
         # Get parameter values
         self.image_width = self.get_parameter('image_width').value
         self.gain_proportional = self.get_parameter('gain_proportional').value
         self.base_linear_speed = self.get_parameter('base_linear_speed').value
         self.max_angular_speed = self.get_parameter('max_angular_speed').value
-        
         # Validate parameters
         self._validate_parameters()
-        
         # Initialize control variables
         self.target_x = self.image_width / 2
         self.last_error = 0.0
-        
         # Setup publishers and subscriber
         self._setup_communications()
-        
         self.get_logger().info(
             f"Line controller initialized with:\n"
             f"  Image width: {self.image_width}\n"
@@ -61,7 +52,6 @@ class LineController(Node):
         if self.image_width <= 0:
             self.get_logger().warn("Invalid image_width, using default 640")
             self.image_width = 640
-            
         if self.gain_proportional <= 0:
             self.get_logger().warn("Invalid gain_proportional, using default 0.1")
             self.gain_proportional = 0.1
@@ -74,14 +64,12 @@ class LineController(Node):
             '/robot_twist', 
             10
         )
-        
         # Error signal publisher
         self.error_pub = self.create_publisher(
             Float64, 
             '/control_error', 
             10
         )
-        
         # Centroid position subscriber
         self.centroid_sub = self.create_subscription(
             PointStamped,
@@ -114,7 +102,6 @@ class LineController(Node):
                 f"Angular Z: {control_msg.angular.z:.2f}rad/s",
                 throttle_duration_sec=0.5
             )
-            
         except Exception as e:
             self.get_logger().error(f"Callback error: {str(e)}", throttle_duration_sec=1.0)
 
@@ -147,20 +134,14 @@ class LineController(Node):
             min(angular_z, self.max_angular_speed),
             -self.max_angular_speed
         )
-        
         return cmd
 
 def main(args=None):
     """Initialize and spin the node."""
     rclpy.init(args=args)
-    
     try:
         controller = LineController()
         rclpy.spin(controller)
-    except KeyboardInterrupt:
-        controller.get_logger().info("Shutting down by user request")
-    except Exception as e:
-        controller.get_logger().fatal(f"Fatal error: {str(e)}")
     finally:
         if 'controller' in locals():
             controller.destroy_node()

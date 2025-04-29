@@ -1,141 +1,144 @@
 #!/usr/bin/env python3
 """
-Advanced ROS Node for Line Following with Proportional Control
+ROS Node for Line Following Controller with PID Control
 
-Features:
-- Proportional control for line centering
-- Configurable parameters via ROS parameters
-- Comprehensive error handling
-- Detailed logging
+This node implements a PID controller to keep a detected line at the center
+of the camera image by adjusting the robot's angular velocity.
 """
 
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Twist, PointStamped
 from std_msgs.msg import Float64
+from rclpy.time import Time
+
+class PID:
+    """Simple PID controller implementation."""
+    def __init__(self, kp=0.0, kd=0.0, ki=0.0):
+        self.kp = kp
+        self.kd = kd
+        self.ki = ki
+        self.prev_error = 0.0
+        self.integral = 0.0
+
+    def proportional(self, error):
+        return self.kp * error
+
+    def derivative(self, error, dt):
+        if dt > 0:
+            derivative = (error - self.prev_error) / dt
+            self.prev_error = error
+            return self.kd * derivative
+        return 0.0
+
+    def integral(self, error, dt):
+        self.integral += error * dt
+        return self.ki * self.integral
+
 class LineController(Node):
-    """Enhanced proportional controller for robust line following."""
+    """PID controller for line following."""
+    
     def __init__(self):
-        """Initialize node with parameters, publishers, and subscriber."""
+        """Initialize the node, publishers, subscriber, and control parameters."""
         super().__init__('line_controller')
-        self.declare_parameters(
-            namespace='',
-            parameters=[
-                ('image_width', 640),
-                ('gain_proportional', 0.1),
-                ('base_linear_speed', 0.1),
-                ('max_angular_speed', 1.0)
-            ]
-        )
-        # Get parameter values
-        self.image_width = self.get_parameter('image_width').value
-        self.gain_proportional = self.get_parameter('gain_proportional').value
-        self.base_linear_speed = self.get_parameter('base_linear_speed').value
-        self.max_angular_speed = self.get_parameter('max_angular_speed').value
-        # Validate parameters
-        self._validate_parameters()
-        # Initialize control variables
-        self.target_x = self.image_width / 2
-        self.last_error = 0.0
-        # Setup publishers and subscriber
-        self._setup_communications()
-        self.get_logger().info(
-            f"Line controller initialized with:\n"
-            f"  Image width: {self.image_width}\n"
-            f"  Proportional gain: {self.gain_proportional}\n"
-            f"  Base speed: {self.base_linear_speed}\n"
-            f"  Max angular: {self.max_angular_speed}"
-        )
-
-    def _validate_parameters(self):
-        """Ensure parameters are within valid ranges."""
-        if self.image_width <= 0:
-            self.get_logger().warn("Invalid image_width, using default 640")
-            self.image_width = 640
-        if self.gain_proportional <= 0:
-            self.get_logger().warn("Invalid gain_proportional, using default 0.1")
-            self.gain_proportional = 0.1
-
-    def _setup_communications(self):
-        """Configure all ROS publishers and subscribers."""
-        # Control command publisher
-        self.twist_pub = self.create_publisher(Twist, 
-            '/robot_twist', 
-            10
-        )
-        # Error signal publisher
-        self.error_pub = self.create_publisher(Float64, 
-            '/control_error', 
-            10
-        )
-        # Centroid position subscriber
+        
+        # 1) Initialize attributes (all set to zero for now)
+        self.lin_speed = 0.0
+        self.gain_proportional = 0.0
+        self.gain_derivative = 0.0
+        self.gain_integral = 0.0
+        
+        # Camera image width (pixels)
+        self.image_width = 640
+        
+        # 3) Initialize PID controller
+        self.pid = PID(
+            kp=self.gain_proportional,
+            kd=self.gain_derivative,
+            ki=self.gain_integral)
+        
+        # 4) Initialize previous message attribute
+        self.msg_previous = None
+        
+        # 2) Initialize publishers
+        self.twist_pub = self.create_publisher(Twist, '/cmd_vel', 10)
+        self.error_pub = self.create_publisher(Float64, '/control_error', 10)
+        
+        # 2) Initialize subscriber
         self.centroid_sub = self.create_subscription(
             PointStamped,
             '/image/centroid',
             self.centroid_callback,
-            10
-        )
+            10)
+        
+        self.get_logger().info('Line controller node initialized')
 
     def centroid_callback(self, msg):
         """
-        Process centroid position and compute control commands.
-        Args:
-            msg (PointStamped): Contains the detected line centroid position
-        """
-        try:
-            # Calculate current error
-            current_error = msg.point.x - self.target_x
-            self.last_error = current_error
-            # Publish error for monitoring
-            self._publish_error(current_error)
-            # Generate and publish control command
-            control_msg = self._generate_control_command(current_error)
-            self.twist_pub.publish(control_msg)
-            
-            self.get_logger().debug(
-                f"Control Update - Error: {current_error:.2f}px, "
-                f"Angular Z: {control_msg.angular.z:.2f}rad/s",
-                throttle_duration_sec=0.5
-            )
-        except Exception as e:
-            self.get_logger().error(f"Callback error: {str(e)}", throttle_duration_sec=1.0)
-
-    def _publish_error(self, error):
-        """Publish the current error to the error topic."""
-        error_msg = Float64()
-        error_msg.data = error
-        self.error_pub.publish(error_msg)
-
-    def _generate_control_command(self, error):
-        """
-        Generate Twist message based on current error.
+        Callback for processing centroid position and computing control output.
         
         Args:
-            error (float): Current error in pixels
-            
-        Returns:
-            Twist: Control command message
+            msg (PointStamped): Message containing the x-coordinate of the detected line centroid
         """
-        cmd = Twist()
-        # Set constant forward velocity
-        cmd.linear.x = self.base_linear_speed
-        # Calculate angular velocity (proportional control)
-        angular_z = -self.gain_proportional * error
-        # Apply angular speed limits
-        cmd.angular.z = max(
-            min(angular_z, self.max_angular_speed),
-            -self.max_angular_speed
-        )
-        return cmd
+        try:
+            # 1) Compute error signal
+            error_signal = msg.point.x - (self.image_width / 2)
+            
+            # 2) Publish error signal
+            error_msg = Float64()
+            error_msg.data = error_signal
+            self.error_pub.publish(error_msg)
+            
+            # 3) Calculate time delay
+            time_delay = 0.0
+            if self.msg_previous is not None:
+                time_delay = self.stamp_difference(msg.header.stamp, self.msg_previous.header.stamp)
+            
+            # 4) Initialize Twist message
+            msg_twist = Twist()
+            
+            # 5) Set linear speed
+            msg_twist.linear.x = self.lin_speed
+            
+            # 6) Set angular speed using PID controller
+            angular_z = (self.pid.proportional(error_signal) +
+                         self.pid.derivative(error_signal, time_delay) +
+                         self.pid.integral(error_signal, time_delay))
+            msg_twist.angular.z = float(angular_z)
+            
+            # 7) Publish Twist message
+            self.twist_pub.publish(msg_twist)
+            
+            # Update previous message
+            self.msg_previous = msg
+            
+            self.get_logger().debug(
+                f"Error: {error_signal:.2f}, Angular Z: {msg_twist.angular.z:.2f}",
+                throttle_duration_sec=1)
+            
+        except Exception as e:
+            self.get_logger().error(f"Error in centroid callback: {str(e)}")
+
+    @staticmethod
+    def stamp_difference(stamp2, stamp1):
+        """Calculate time difference between two stamps in seconds"""
+        time1 = Time.from_msg(stamp1)
+        time2 = Time.from_msg(stamp2)
+        duration = time2 - time1
+        return duration.nanoseconds / 1e9
 
 def main(args=None):
-    """Initialize and spin the node."""
+    """Main entry point for the ROS node."""
     rclpy.init(args=args)
     controller = LineController()
-    rclpy.spin(controller)
-    if 'controller' in locals():
+    
+    try:
+        rclpy.spin(controller)
+    except KeyboardInterrupt:
+        pass
+    finally:
         controller.destroy_node()
-    rclpy.shutdown()
+        rclpy.shutdown()
 
 if __name__ == '__main__':
     main()

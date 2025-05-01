@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 """ A first template for a PID controller """
-
-
 class PID():
     """ Computes proportional, derivative, and integral terms for a PID controller """
     def __init__(self, gain_kp=1.0, gain_kd=1.0, gain_ki=1.0):
@@ -9,7 +7,6 @@ class PID():
         self.gain_kp = gain_kp
         self.gain_kd = gain_kd
         self.gain_ki = gain_ki
-
         self.error_signal_previous = None
         self.error_signal_integral = 0
 
@@ -32,4 +29,3 @@ class PID():
             control_d = -self.gain_kd * (error_signal - self.error_signal_previous) / time_delay
         self.error_signal_previous = error_signal
         return control_d
-        

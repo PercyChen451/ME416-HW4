@@ -13,7 +13,6 @@ from rclpy.node import Node
 from rclpy.time import Time
 from geometry_msgs.msg import Twist, PointStamped
 from std_msgs.msg import Float64
-
 class PID:
     """PID controller implementation for angular velocity correction."""
     def __init__(self, kp=0.0, kd=0.0, ki=0.0):
@@ -46,7 +45,6 @@ class PID:
         self.integral += error * dt
         i_term = self.ki * self.integral
         return p_term + d_term + i_term
-
 class LineController(Node):
     """ROS node for visual line following using PID control."""
     def __init__(self):
@@ -57,13 +55,6 @@ class LineController(Node):
         - ROS publishers/subscribers
         """
         super().__init__('line_controller')
-        self._init_parameters()
-        self._init_publishers()
-        self._init_subscribers()
-        self.get_logger().info('Line controller node initialized')
-
-    def _init_parameters(self):
-        """Initialize all control parameters."""
         self.lin_speed = 0.1  # Constant forward speed (m/s)
         self.image_width = 640  # Camera image width in pixels
         self.gain_proportional = 0.5
@@ -74,22 +65,17 @@ class LineController(Node):
             kd=self.gain_derivative,
             ki=self.gain_integral)
         self.msg_previous = None
-    def _init_publishers(self):
-        """Initialize all ROS publishers."""
         self.cmd_vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
         self.error_pub = self.create_publisher(Float64, '/control_error', 10)
-    def _init_subscribers(self):
-        """Initialize all ROS subscribers."""
         self.centroid_sub = self.create_subscription(
             PointStamped,
             '/image/centroid',
             self.centroid_callback,
             10)
-
+        self.get_logger().info('Line controller node initialized')
     def centroid_callback(self, msg):
         """
         Process centroid position and compute control output.
-        
         Args:
             msg (PointStamped): Message containing line centroid coordinates
         """
@@ -116,7 +102,6 @@ class LineController(Node):
             self.get_logger().error(
                 f"Control error: {str(e)}",
                 throttle_duration_sec=1.0)
-
     @staticmethod
     def stamp_difference(stamp2, stamp1):
         """

@@ -9,7 +9,8 @@ class PID:
         self.ki = float(ki)
         self.prev_error = 0.0
         self.integral = 0.0
-    def update(self, error, dt): """Calculate all PID terms at once."""
+    def update(self, error, dt):
+        """Calculate all PID terms at once."""
         p_term = self.kp * error
         d_term = 0.0
         if dt > 0:

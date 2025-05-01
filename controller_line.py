@@ -2,13 +2,11 @@
 """
 ROS Node for Line Following Controller with PID Control
 """
-
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Twist, PointStamped
 from std_msgs.msg import Float64
 from rclpy.time import Time
-
 class PID:
     """PID controller implementation."""
     def __init__(self, kp=0.0, kd=0.0, ki=0.0):
@@ -18,38 +16,25 @@ class PID:
         self.ki = float(ki)
         self.prev_error = 0.0
         self.integral = 0.0
-
     def update(self, error, dt):
         """Calculate all PID terms at once."""
-        # Proportional term
         p_term = self.kp * error
-        
-        # Derivative term
         d_term = 0.0
         if dt > 0:
             d_term = self.kd * (error - self.prev_error) / dt
             self.prev_error = error
-        
-        # Integral term
         self.integral += error * dt
         i_term = self.ki * self.integral
-        
         return p_term + d_term + i_term
-
 class LineController(Node):
-    """PID controller for line following."""
-    
     def __init__(self):
         """Initialize node with parameters and publishers."""
         super().__init__('line_controller')
-        
-        # Initialize parameters
         self.lin_speed = 0.1  # Set to small non-zero value for testing
         self.gain_proportional = 0.5  # Start with P term only
         self.gain_derivative = 0.0
         self.gain_integral = 0.0
         self.image_width = 640
-
         self.pid = PID(
             kp=self.gain_proportional,
             kd=self.gain_derivative,
@@ -62,7 +47,6 @@ class LineController(Node):
             '/image/centroid',
             self.centroid_callback,
             10)
-        
         self.get_logger().info('Line controller node initialized')
 
     def centroid_callback(self, msg):
@@ -77,20 +61,15 @@ class LineController(Node):
                 time_delay = self.stamp_difference(msg.header.stamp, self.msg_previous.header.stamp)
             msg_twist = Twist()
             msg_twist.linear.x = float(self.lin_speed)
-            # Calculate PID output using single update call
             pid_output = self.pid.update(error_signal, time_delay)
             msg_twist.angular.z = float(pid_output)
-            # Publish
             self.cmd_vel_pub.publish(msg_twist)
             self.msg_previous = msg
-            
             self.get_logger().info(
                 f"Error: {error_signal:.1f}, Output: {pid_output:.2f}",
                 throttle_duration_sec=0.5)
-            
         except Exception as e:
             self.get_logger().error(f"Error in callback: {str(e)}")
-
     @staticmethod
     def stamp_difference(stamp2, stamp1):
         """Calculate time difference between two stamps in seconds."""
@@ -98,12 +77,10 @@ class LineController(Node):
         time2 = Time.from_msg(stamp2)
         duration = time2 - time1
         return duration.nanoseconds / 1e9
-
 def main(args=None):
     """Main function to initialize and run the node."""
     rclpy.init(args=args)
     controller = LineController()
-    
     try:
         rclpy.spin(controller)
     except KeyboardInterrupt:

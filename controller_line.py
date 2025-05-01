@@ -49,8 +49,6 @@ class PID:
         self.integral += error * dt
         i_term = self.ki * self.integral
         return p_term + d_term + i_term
-
-
 class LineController(Node):
     """ROS node for visual line following using PID control."""
     def __init__(self):
@@ -105,21 +103,17 @@ class LineController(Node):
                 time_delay = self.stamp_difference(
                     msg.header.stamp, 
                     self.msg_previous.header.stamp)
-            # Generate control command
             msg_twist = Twist()
             msg_twist.linear.x = float(self.lin_speed)
             pid_output = self.pid.update(error_signal, time_delay)
             msg_twist.angular.z = float(pid_output)
-            # Publish command
             self.cmd_vel_pub.publish(msg_twist)
             self.msg_previous = msg
             self.get_logger().info(
                 f"Error: {error_signal:.1f}, Output: {pid_output:.2f}",
-                throttle_duration_sec=0.5)
-                
+                throttle_duration_sec=0.5)     
         except (ValueError, AttributeError) as e:
             self.get_logger().error(f"Control error: {str(e)}", throttle_duration_sec=1.0)
-
     @staticmethod
     def stamp_difference(stamp2, stamp1):
         """
